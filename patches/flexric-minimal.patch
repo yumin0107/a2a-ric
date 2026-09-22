@@ -1,0 +1,225 @@
+diff --git a/src/xApp/CMakeLists.txt b/src/xApp/CMakeLists.txt
+index 15486b5..a5e5c80 100644
+--- a/src/xApp/CMakeLists.txt
++++ b/src/xApp/CMakeLists.txt
+@@ -76,6 +76,7 @@ set(XAPP_SRC
+   $<TARGET_OBJECTS:e2sm_rc_ir_obj>
+   
+   ../util/ngran_types.c
++  ../util/time_now_us.c
+   ../sm/mac_sm/ie/mac_data_ie.c
+   ../sm/rlc_sm/ie/rlc_data_ie.c
+   ../sm/pdcp_sm/ie/pdcp_data_ie.c
+@@ -93,11 +94,14 @@ if(E2AP_ENCODING STREQUAL "ASN")
+             )
+   target_link_libraries(e42_xapp
+                      PUBLIC
+-                     asn1_nr_rrc
+                      sm_common_dec_asn_obj_rc
+                      3gpp_derived_ie_dec_asn_obj_rc
+                     )
+ 
++  if(XAPP_DB STREQUAL "SQLITE3_XAPP")
++    target_link_libraries(e42_xapp PUBLIC asn1_nr_rrc)
++  endif()
++
+           add_library(e42_xapp_shared SHARED # STATIC or SHARED
+             ${XAPP_SRC}
+             $<TARGET_OBJECTS:e2ap_asn1_obj>
+diff --git a/src/xApp/db/CMakeLists.txt b/src/xApp/db/CMakeLists.txt
+index ad3dab8..c5a6681 100644
+--- a/src/xApp/db/CMakeLists.txt
++++ b/src/xApp/db/CMakeLists.txt
+@@ -50,6 +50,8 @@ if(XAPP_DB STREQUAL "SQLITE3_XAPP")
+                          ../../util/time_now_us.c
+                          )
+   target_link_libraries(e42_xapp_db_obj PUBLIC asn1_nr_rrc)
++elseif(XAPP_DB STREQUAL "NONE_XAPP")
++  add_library(e42_xapp_db_obj OBJECT db_none.c)
+ else()
+   message(FATAL_ERROR "Unknown XAPP_DB selected")
+ endif()
+diff --git a/src/xApp/db/db.h b/src/xApp/db/db.h
+index 191873b..88a260f 100644
+--- a/src/xApp/db/db.h
++++ b/src/xApp/db/db.h
+@@ -19,6 +19,8 @@ typedef struct{
+ 
+ #ifdef SQLITE3_XAPP
+   sqlite3* handler;
++#elif defined(NONE_XAPP)
++  void* handler;
+ #else
+   static_assert(0!=0, "Unknown DB selected for the xApp"); 
+ #endif
+diff --git a/src/xApp/db/db_none.c b/src/xApp/db/db_none.c
+new file mode 100644
+index 0000000..3e746fa
+--- /dev/null
++++ b/src/xApp/db/db_none.c
+@@ -0,0 +1,24 @@
++/* SPDX-License-Identifier: LicenseRef-CSSL-1.0 */
++
++#include "db.h"
++
++#include <assert.h>
++
++void init_db_xapp(db_xapp_t* db, char const* db_filename)
++{
++  assert(db != NULL);
++  (void)db_filename;
++  db->handler = NULL;
++}
++
++void close_db_xapp(db_xapp_t* db)
++{
++  assert(db != NULL);
++}
++
++void write_db_xapp(db_xapp_t* db, global_e2_node_id_t const* id, sm_ag_if_rd_t const* rd)
++{
++  assert(db != NULL);
++  (void)id;
++  (void)rd;
++}
+diff --git a/src/xApp/swig/swig_wrapper.cpp b/src/xApp/swig/swig_wrapper.cpp
+index dbdc8b8..6c3b253 100644
+--- a/src/xApp/swig/swig_wrapper.cpp
++++ b/src/xApp/swig/swig_wrapper.cpp
+@@ -61,6 +61,26 @@ void init()
+   init_xapp_api(&args);
+ }
+ 
++void init_with_paths(std::string const& conf_file, std::string const& libs_dir)
++{
++  assert(initialized == false && "Already initialized!");
++
++  char program[] = "xapp";
++  char conf_flag[] = "-c";
++  char libs_flag[] = "-p";
++  char* argv[] = {
++    program,
++    conf_flag,
++    const_cast<char*>(conf_file.c_str()),
++    libs_flag,
++    const_cast<char*>(libs_dir.c_str()),
++  };
++  fr_args_t args = init_fr_args(5, argv);
++
++  initialized = true;
++  init_xapp_api(&args);
++}
++
+ void xapp_wait(void)
+ {
+   return xapp_wait_end_api();
+@@ -87,7 +107,7 @@ std::vector<E2Node> conn_e2_nodes(void)
+     std::vector<ran_function_t> ran_func;//(src->len_rf);
+ 
+     for(size_t j = 0; j < src->len_rf; ++j){
+-      ran_function_t rf = {.id = src->rf[i].id, .rev = src->rf[i].rev }; //cp_ran_function(&src->ack_rf[j]);
++      ran_function_t rf = {.id = src->rf[j].id, .rev = src->rf[j].rev }; //cp_ran_function(&src->ack_rf[j]);
+       ran_func.push_back(rf);// [j] = rf;
+     }
+     tmp.ran_func = ran_func;
+@@ -165,6 +185,17 @@ void rm_report_mac_sm(int handle)
+ 
+ }
+ 
++bool control_mac_sm(global_e2_node_id_t* id)
++{
++  assert(id != NULL);
++
++  mac_ctrl_req_data_t wr = {};
++  wr.hdr.dummy = 1;
++  wr.msg.action = 42;
++  sm_ans_xapp_t const ans = control_sm_xapp_api(id, SM_MAC_ID, &wr);
++  return ans.success;
++}
++
+ 
+ //////////////////////////////////////
+ // RLC SM   
+diff --git a/src/xApp/swig/swig_wrapper.h b/src/xApp/swig/swig_wrapper.h
+index 223f713..8ab929a 100644
+--- a/src/xApp/swig/swig_wrapper.h
++++ b/src/xApp/swig/swig_wrapper.h
+@@ -31,6 +31,8 @@ struct E2Node {
+ 
+ void init(void); 
+ 
++void init_with_paths(std::string const& conf_file, std::string const& libs_dir);
++
+ void xapp_wait(void);
+ 
+ bool try_stop(void);
+@@ -62,6 +64,8 @@ int report_mac_sm(global_e2_node_id_t* id, Interval inter, mac_cb* handler);
+ 
+ void rm_report_mac_sm(int);
+ 
++bool control_mac_sm(global_e2_node_id_t* id);
++
+ //////////////////////////////////////
+ // RLC SM   
+ /////////////////////////////////////
+diff --git a/examples/emulator/agent/sm_mac.c b/examples/emulator/agent/sm_mac.c
+index cccab9c..c99c063 100644
+--- a/examples/emulator/agent/sm_mac.c
++++ b/examples/emulator/agent/sm_mac.c
+@@ -4,6 +4,12 @@
+ #include "sm_mac.h"
+ #include "../../../test/rnd/fill_rnd_data_mac.h"
+ #include <assert.h>
++#include <stdatomic.h>
++
++// A control action changes synthetic radio/QoS proxy fields for the next five
++// seconds (the xApp subscribes every 10 ms). This makes closed-loop behavior
++// measurable without pretending that the emulator contains a real scheduler.
++static _Atomic uint32_t mitigation_reads = 0;
+ 
+ void init_mac_sm(void)
+ {
+@@ -24,6 +30,18 @@ bool read_mac_sm(void* data)
+ 
+   mac_ind_data_t* mac = (mac_ind_data_t*)data;
+   fill_mac_ind_data(mac);
++  uint32_t remaining = atomic_load(&mitigation_reads);
++  if(remaining > 0){
++    for(uint32_t i = 0; i < mac->msg.len_ue_stats; ++i){
++      mac->msg.ue_stats[i].dl_aggr_prb = (mac->msg.ue_stats[i].dl_aggr_prb * 35) / 100;
++      uint64_t boosted_tbs = (mac->msg.ue_stats[i].dl_aggr_tbs * 140) / 100;
++      mac->msg.ue_stats[i].dl_aggr_tbs = boosted_tbs > 1023 ? 1023 : boosted_tbs;
++      mac->msg.ue_stats[i].bsr = (mac->msg.ue_stats[i].bsr * 40) / 100;
++      mac->msg.ue_stats[i].dl_aggr_retx_prb =
++          (mac->msg.ue_stats[i].dl_aggr_retx_prb * 40) / 100;
++    }
++    atomic_fetch_sub(&mitigation_reads, 1);
++  }
+   return true;
+ }
+ 
+@@ -42,6 +60,7 @@ sm_ag_if_ans_t write_ctrl_mac_sm(void const* data)
+   mac_ctrl_req_data_t* ctrl = (mac_ctrl_req_data_t*)data; 
+   assert(ctrl->hdr.dummy == 1);
+   assert(ctrl->msg.action == 42);
++  atomic_store(&mitigation_reads, 500);
+ 
+   sm_ag_if_ans_t ans = {.type = CTRL_OUTCOME_SM_AG_IF_ANS_V0 };
+   return ans;
+diff --git a/test/rnd/fill_rnd_data_mac.c b/test/rnd/fill_rnd_data_mac.c
+index f7f1bfb..aacf003 100644
+--- a/test/rnd/fill_rnd_data_mac.c
++++ b/test/rnd/fill_rnd_data_mac.c
+@@ -12,7 +12,11 @@
+ void fill_mac_ind_data(mac_ind_data_t* ind)
+ {
+   assert(ind != NULL);
+-  srand(time(0));
++  static bool seeded = false;
++  if(!seeded){
++    srand((unsigned int)(time(NULL) ^ time_now_us()));
++    seeded = true;
++  }
+ 
+   int const mod = 1024;
+ 

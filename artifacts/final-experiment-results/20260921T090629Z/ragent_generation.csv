@@ -1,0 +1,6 @@
+trial,latency_ms,success,fallback,policy_id
+1,1098.056903,True,False,mitigate_congestion_PRB_Boost
+2,1074.643536,True,False,mitigate_congestion_PRB_Boost
+3,1078.963754,True,False,mitigate_congestion_PRB_Boost
+4,1069.084753,True,False,mitigate_congestion_PRB_Boost
+5,1072.236134,True,False,mitigate_congestion_PRB_Boost

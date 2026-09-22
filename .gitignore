@@ -1,0 +1,55 @@
+# Python caches and test outputs
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local environments, installs, and secrets
+.venv/
+.venv-*/
+.local/
+.env
+.env.*
+!.env.example
+
+# Downloaded third-party source and build products
+/third_party/
+build/
+dist/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+
+# Runtime artifacts. Keep only the curated final experiment run.
+/artifacts/*
+!/artifacts/final-experiment-results/
+/artifacts/final-experiment-results/*
+!/artifacts/final-experiment-results/20260921T090629Z/
+*.log
+/artifacts/final-experiment-results/20260921T090629Z/log.txt
+/artifacts/final-experiment-results/20260921T090629Z/llm-container-id.txt
+/artifacts/final-experiment-results/20260921T090629Z/plot-files.txt
+
+# Temporary/runtime files
+*.pid
+*.tmp
+*.swp
+*~
+
+# Editor and OS metadata
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local funding forms and report drafts (not part of the public code/results)
+/붙임*.pdf
+/별첨*.pdf
+/붙임*_작성안.txt
+/system_model.pdf

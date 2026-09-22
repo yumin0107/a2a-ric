@@ -1,0 +1,61 @@
+services:
+  llm:
+    image: vllm/vllm-openai:latest
+    command: >
+      --model Qwen/Qwen2.5-7B-Instruct
+      --dtype auto
+      --max-model-len 4096
+      --gpu-memory-utilization 0.90
+      --host 0.0.0.0
+      --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      - HF_HOME=/root/.cache/huggingface
+      # - HUGGING_FACE_HUB_TOKEN=xxxx
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    device_requests:
+      - driver: nvidia
+        count: 1
+        capabilities: [gpu]
+
+  ragent:
+    build:
+      context: .
+      dockerfile: ragent/Dockerfile
+    ports:
+      - "8001:8000"
+    depends_on:
+      - llm
+    environment:
+      - LLM_BASE_URL=http://llm:8000/v1
+      - LLM_MODEL=Qwen/Qwen2.5-7B-Instruct
+
+  xagent:
+    build:
+      context: .
+      dockerfile: xagent/Dockerfile
+    ports:
+      - "8002:8000"
+    depends_on:
+      - llm
+      - ragent
+    environment:
+      - LLM_BASE_URL=http://llm:8000/v1
+      - LLM_MODEL=Qwen/Qwen2.5-7B-Instruct
+
+  xapp_monitor:
+    build:
+      context: .
+      dockerfile: xapp_monitor/Dockerfile
+    depends_on:
+      - xagent
+
+volumes:
+  hf_cache:
